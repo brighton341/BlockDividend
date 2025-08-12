@@ -105,7 +105,7 @@
     (let (
         (current-holdings (get-participant-holdings tx-sender))
         (last-withdrawal (default-to u0 (map-get? withdrawal-timestamps tx-sender)))
-        (current-block stacks-block-height)
+        (current-block block-height)
     )
     (asserts! (>= current-holdings withdrawal-amount) err-capital-shortage)
     (asserts! (>= (- current-block last-withdrawal) liquidity-freeze-cycles) err-withdrawal-locked)
@@ -136,11 +136,11 @@
 (define-public (initiate-referendum (proposition (string-utf8 256)))
     (let (
         (referendum-id (var-get referendum-counter))
-        (activation-block stacks-block-height)
+        (activation-block block-height)
         (expiration-block (+ activation-block referendum-duration))
-        (participant-holdings (get-participant-holdings tx-sender))
+        (participant-capital (get-participant-holdings tx-sender))
     )
-    (asserts! (>= participant-holdings silver-threshold) (err u109))
+    (asserts! (>= participant-capital silver-threshold) (err u109))
     
     ;; Create referendum record
     (map-set governance-referendums referendum-id {
@@ -167,7 +167,7 @@
         (current-tallies (default-to {affirmative: u0, negative: u0} (map-get? referendum-tallies referendum-id)))
     )
     (asserts! (not (default-to false (map-get? referendum-ballots {referendum: referendum-id, participant: tx-sender}))) err-ballot-cast)
-    (asserts! (and (>= stacks-block-height (get activation-block referendum)) (<= stacks-block-height (get expiration-block referendum))) err-referendum-inactive)
+    (asserts! (and (>= block-height (get activation-block referendum)) (<= block-height (get expiration-block referendum))) err-referendum-inactive)
     
     ;; Record ballot
     (map-set referendum-ballots {referendum: referendum-id, participant: tx-sender} ballot-choice)
@@ -204,7 +204,7 @@
 ;; Stratified Dividend Computation
 (define-public (compute-dividends (participant principal))
     (let (
-        (participant-holdings (get-participant-holdings participant))
+        (participant-capital (get-participant-holdings participant))
         (participant-stratum (default-to u1 (map-get? capital-stratum participant)))
         (stratum-multiplier (get-stratum-multiplier participant-stratum))
         (total-capital (var-get aggregate-capital))
@@ -212,7 +212,7 @@
     )
     (if (is-eq total-capital u0)
         (ok u0)
-        (ok (/ (* (* participant-holdings epoch-yield) stratum-multiplier) (* total-capital u1000))))
+        (ok (/ (* (* participant-capital epoch-yield) stratum-multiplier) (* total-capital u1000))))
 ))
 
 (define-private (get-stratum-multiplier (stratum uint))
@@ -230,14 +230,14 @@
 (define-public (activate-emergency-protocol)
     (begin
         (asserts! (is-eq tx-sender protocol-guardian) err-guardian-restricted)
-        (var-set emergency-activation (+ stacks-block-height temporal-delay))
-        (ok stacks-block-height))
+        (var-set emergency-activation (+ block-height temporal-delay))
+        (ok block-height))
 )
 
 (define-public (execute-emergency-recovery)
     (begin
         (asserts! (is-eq tx-sender protocol-guardian) err-guardian-restricted)
-        (asserts! (>= stacks-block-height (var-get emergency-activation)) (err u110))
+        (asserts! (>= block-height (var-get emergency-activation)) (err u110))
         (let (
             (protocol-balance (stx-get-balance (as-contract tx-sender)))
         )
